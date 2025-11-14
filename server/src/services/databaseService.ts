@@ -1,95 +1,108 @@
+import express from 'express';
 import { PrismaClient } from '@prisma/client';
 
-// Prismaを使うためのおまじない
-const prisma = new PrismaClient();
+// --- 初期設定 ---
 
-// --- データの保存 ---
+const prisma = new PrismaClient();
+const app = express();
+const port = 3000; // サーバーが待ち受けるポート番号
+
+// --- ミドルウェア設定 ---
+
+// フロントエンドから送られてくるJSON形式のデータ（リクエストボディ）を
+// 読めるようにするためのおまじない
+app.use(express.json());
+
+// --- APIエンドポイントの定義 ---
 
 /**
- * 例1: 新しい利用者を登録する
- * (例: ユーザーが初めて名前を入力した時に呼ぶ)
+ * 動作確認用 (GET /)
+ * ブラウザで http://localhost:3000/ にアクセスすると動作確認できる
  */
-async function createNewUser(userName: string) {
+app.get('/', (req, res) => {
+  res.send('こんにちは！AIチャットアプリのサーバーです。');
+});
+
+/**
+ * API: 新しいユーザーを作成する
+ * (POST http://localhost:3000/api/users)
+ *
+ * フロントエンドから {"name": "山田"} のようなJSONが送られてくる想定
+ */
+app.post('/api/users', async (req, res) => {
   try {
+    const { name } = req.body; // 送られてきたJSONから name を取り出す
+
     const newUser = await prisma.user.create({
       data: {
-        name: userName,
-        // idは@default(cuid())で自動生成される
+        name: name,
       },
     });
-    console.log('新しいユーザーを作成しました:', newUser);
-    return newUser;
+
+    res.json(newUser); // 作成したユーザー情報をフロントに返す
   } catch (error) {
-    console.error('ユーザー作成に失敗しました:', error);
+    res.status(500).json({ error: 'ユーザー作成に失敗しました' });
   }
-}
+});
 
 /**
- * 例2: AIとの対話履歴を保存する
- * (例: フロントから「発言と応答」が送られてきた時に呼ぶ)
+ * API: チャット履歴を保存する
+ * (POST http://localhost:3000/api/chat)
+ *
+ * フロントエンドから以下のようなJSONが送られてくる想定
+ * {
+ * "userId": "xxxxxxxx",
+ * "userInput": "こんにちは",
+ * "appResponse": "はい、こんにちは。"
+ * }
  */
-async function saveConversation(
-  userId: string,  // どのユーザーか
-  userInput: string, // ユーザーが書いた内容
-  aiResponse: string // AIの応答
-) {
+app.post('/api/chat', async (req, res) => {
   try {
+    // フロントから送られてきたデータを取り出す
+    const { userId, userInput, appResponse } = req.body;
+
+    // データベースに保存 (test.ts でやったことと同じ)
     const newChat = await prisma.chatHistory.create({
       data: {
-        userId: userId, // どのUserのidに紐づけるか
+        userId: userId,
         userInput: userInput,
-        appResponse: aiResponse,
-        // id や createdAt は自動で入る
+        appResponse: appResponse,
       },
     });
-    console.log('対話履歴を保存しました:', newChat);
-    return newChat;
-  } catch (error) {
-    console.error('履歴の保存に失敗しました:', error);
-  }
-}
 
-// --- データの取得（おまけ） ---
+    res.json(newChat); // 保存したチャット履歴をフロントに返す
+  } catch (error) {
+    console.error(error); // サーバー側でもエラーログを出す
+    res.status(500).json({ error: 'チャット履歴の保存に失敗しました' });
+  }
+});
 
 /**
- * 例3: 特定の利用者のすべての対話履歴を取得する
- * (例: 「過去の履歴」ページで呼ぶ)
+ * API: 特定ユーザーのチャット履歴を取得する（おまけ）
+ * (GET http://localhost:3000/api/chat/ユーザーID)
  */
-async function getUserHistory(userId: string) {
+app.get('/api/chat/:userId', async (req, res) => {
   try {
+    const { userId } = req.params; // URLの :userId 部分を取り出す
+
     const history = await prisma.chatHistory.findMany({
       where: {
-        userId: userId, // 指定したuserIdの履歴だけ
+        userId: userId,
       },
       orderBy: {
-        createdAt: 'desc', // 新しい順に並び替え
+        createdAt: 'asc', // 古い順
       },
     });
-    return history;
+
+    res.json(history);
   } catch (error) {
-    console.error('履歴の取得に失敗しました:', error);
+    res.status(500).json({ error: '履歴の取得に失敗しました' });
   }
-}
+});
 
-// --- 実行例 ---
-async function main() {
-  // 1. ユーザー「山田さん」を作成
-  const user = await createNewUser('山田');
+// --- サーバー起動 ---
 
-  if (user) {
-    // 2. 山田さんの対話履歴を保存
-    await saveConversation(
-      user.id,
-      'こんにちは、元気ですか？',
-      'はい、元気です。'
-    );
-    
-    // 3. 山田さんの履歴を取得
-    const history = await getUserHistory(user.id);
-    console.log('山田さんの履歴:', history);
-  }
-  
-  await prisma.$disconnect(); // 最後に接続を切る
-}
-
-main();
+app.listen(port, () => {
+  console.log(`サーバーがポート ${port} で起動しました。`);
+  console.log(`動作確認: http://localhost:${port}`);
+});
