@@ -1,0 +1,37 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+// データベースの種類を指定
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL") // 接続情報は環境変数から読み込む
+}
+
+// TypeScriptコードを自動生成する設定
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 1. 利用者テーブル
+model User {
+  id    String @id @default(cuid()) // 利用者ID
+  name  String
+  
+  // User 1人に対して、ChatHistory は複数ある (リレーション)
+  chats ChatHistory[] 
+}
+
+// 2. 対話履歴テーブル
+model ChatHistory {
+  id        Int      @id @default(autoincrement()) // 履歴ID
+  userInput String   @db.Text // 長文OK
+  appResponse String @db.Text // 長文OK
+  createdAt DateTime @default(now()) // 現在時刻を自動入力
+
+  // ChatHistory は 1人の User に属する (リレーション)
+  user   User   @relation(fields: [userId], references: [id])
+  userId String // 外部キー (Userのidと繋がる)
+}
